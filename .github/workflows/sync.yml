@@ -89,18 +89,26 @@ jobs:
               Write-Host "---"
               Write-Host "🔍 Checking if ${pkgId} (${version}) exists on GitHub..."
 
+              $ghRegistrationUrl = "${ghSrcBase}/registration-semver2/${idLow}/index.json"
               $exists = $false
               try {
                   $auth = @{"Authorization" = "Bearer ${{ secrets.GITHUB_TOKEN }}"}
-                  $v2Response = Invoke-RestMethod -Uri $ghV2Url -Headers $auth -ErrorAction SilentlyContinue
+                  $reg = Invoke-RestMethod -Uri $ghRegistrationUrl -Headers $auth -ErrorAction SilentlyContinue
                   
-                  if ($null -ne $v2Response) {
-                      Write-Host "ℹ️ Found versions on GitHub: $v2Response"
+                  # GitHub V3 can have versions in 'items' directly or inside 'items.items' (pages)
+                  # We use a deep select to get all catalogEntry versions from all possible levels
+                  $allVersions = $reg.items | ForEach-Object { $_.items } | ForEach-Object { $_.catalogEntry.version }
+
+                  if ($null -ne $allVersions) {
+                      Write-Host "ℹ️ Found versions on GitHub: $($allVersions -join ', ')"
                   }
-                  if ($v2Response -match [regex]::Escape($version)) {
+                  
+                  if ($allVersions -contains $version) {
                       $exists = $true
                   }
-              } catch { $exists = $false }
+              } catch { 
+                  $exists = $false 
+              }
 
               if ($exists) {
                   Write-Host "⏭️ Skipping ${pkgId} (${version}) - confirmed on GitHub."
