@@ -89,19 +89,21 @@ jobs:
               Write-Host "---"
               Write-Host "🔍 Checking if ${pkgId} (${version}) exists on GitHub..."
 
-              $list = dotnet nuget list $pkgId --source $ghSrc --api-key ${{ secrets.GITHUB_TOKEN }}
-              
-              if ($null -ne $list) {
-                  Write-Host "ℹ️ Found versions on GitHub: $($list -join ', ')"
-              }
-    
               $exists = $false
-              if ($list -match "\b$([regex]::Escape($version))\b") {
-                  $exists = $true
-              }
+              try {
+                  $auth = @{"Authorization" = "Bearer ${{ secrets.GITHUB_TOKEN }}"}
+                  $v2Response = Invoke-RestMethod -Uri $ghV2Url -Headers $auth -ErrorAction SilentlyContinue
+                  
+                  if ($null -ne v2Response) {
+                      Write-Host "ℹ️ Found versions on GitHub: $v2Response"
+                  }
+                  if ($v2Response -match [regex]::Escape($version)) {
+                      $exists = $true
+                  }
+              } catch { $exists = $false }
 
               if ($exists) {
-                  Write-Host "⏭️ Skipping ${pkgId} (${version}) - already on GitHub."
+                  Write-Host "⏭️ Skipping ${pkgId} (${version}) - confirmed on GitHub."
                   continue
               }
 
