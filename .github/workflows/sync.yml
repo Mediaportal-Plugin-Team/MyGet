@@ -114,16 +114,15 @@ jobs:
               # Check if package already exists using Registration Index
               $exists = $false
               try {
-                  # Direct URL to the registration index of the specific package
                   $ghRegUrl = "${ghSrcBase}/registration-semver2/${idLow}/index.json"
                   $auth = @{"Authorization" = "Bearer ${{ secrets.GITHUB_TOKEN }}"}
                   
+                  # Fetching metadata
                   $reg = Invoke-RestMethod -Uri $ghRegUrl -Headers $auth -ErrorAction SilentlyContinue
                   
-                  # Get all versions specifically for this package ID
-                  # Registration index has pages (items), each page has items (packages)
-                  $allVersions = $reg.items.items.catalogEntry.version
-                  
+                  # Deep collection of all versions from all possible pages/items
+                  $allVersions = $reg.items | ForEach-Object { $_.items.catalogEntry.version }
+
                   if ($null -ne $allVersions) {
                       Write-Host "ℹ️ GitHub versions for ${pkgId}: $($allVersions -join ', ')"
                       if ($allVersions -contains $version) {
