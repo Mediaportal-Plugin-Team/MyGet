@@ -89,28 +89,19 @@ jobs:
               Write-Host "---"
               Write-Host "🔍 Checking if ${pkgId} (${version}) exists on GitHub..."
 
-              # 1. Reliable check via GitHub V3 API
-              $ghRegistrationUrl = "${ghSrcBase}/registration-semver2/${idLow}/index.json"
-             
+              $list = dotnet nuget list $pkgId --source $ghSrc --api-key ${{ secrets.GITHUB_TOKEN }}
+              
+              if ($null -ne $list) {
+                  Write-Host "ℹ️ Found versions on GitHub: $($list -join ', ')"
+              }
+    
               $exists = $false
-              try {
-                  $auth = @{"Authorization" = "Bearer ${{ secrets.GITHUB_TOKEN }}"}
-                  $reg = Invoke-RestMethod -Uri $ghRegistrationUrl -Headers $auth -ErrorAction SilentlyContinue
-                  
-                  # GitHub V3 can return versions in 'items' or sub-items (pages)
-                  # This search covers all nested items to find the version
-                  $allVersions = $reg.items | ForEach-Object { $_.items } | ForEach-Object { $_.catalogEntry.version }
-
-                  if ($null -ne $allVersions) {
-                      Write-Host "ℹ️ Found versions on GitHub: $($allVersions -join ', ')"
-                  }
-                  if ($allVersions -contains $version) {
-                      $exists = $true
-                  }
-              } catch { $exists = $false }
+              if ($list -match "\b$([regex]::Escape($version))\b") {
+                  $exists = $true
+              }
 
               if ($exists) {
-                  Write-Host "⏭️ Skipping ${pkgId} (${version}) - confirmed on GitHub."
+                  Write-Host "⏭️ Skipping ${pkgId} (${version}) - already on GitHub."
                   continue
               }
 
