@@ -111,28 +111,29 @@ jobs:
               Write-Host "---"
               Write-Host "🔍 Checking if ${pkgId} (${version}) exists on GitHub..."
 
-              $ghSearchUrl = "${ghSrcBase}/query?q=packageid:${idLow}&prerelease=true"
+              # Check if package already exists using Registration Index
               $exists = $false
               try {
+                  # Direct URL to the registration index of the specific package
+                  $ghRegUrl = "${ghSrcBase}/registration-semver2/${idLow}/index.json"
                   $auth = @{"Authorization" = "Bearer ${{ secrets.GITHUB_TOKEN }}"}
-                  $found = Invoke-RestMethod -Uri $ghSearchUrl -Headers $auth -ErrorAction SilentlyContinue
-
-                  # Check if the specific version is in the results
-                  if ($null -ne $found) {
-                      Write-Host "ℹ️ Found versions on GitHub: $($found.data.versions.version -join ', ')"
-                  }
-                  foreach ($entry in $found.data) {
-                      if ($entry.id.ToLower() -eq $idLow) {
-                          if ($entry.versions.version -contains $version) {
-                              $exists = $true
-                              break
-                          }
+                  
+                  $reg = Invoke-RestMethod -Uri $ghRegUrl -Headers $auth -ErrorAction SilentlyContinue
+                  
+                  # Get all versions specifically for this package ID
+                  # Registration index has pages (items), each page has items (packages)
+                  $allVersions = $reg.items.items.catalogEntry.version
+                  
+                  if ($null -ne $allVersions) {
+                      Write-Host "ℹ️ GitHub versions for ${pkgId}: $($allVersions -join ', ')"
+                      if ($allVersions -contains $version) {
+                          $exists = $true
                       }
-                  }                  
+                  }
               } catch { $exists = $false }
 
               if ($exists) {
-                  Write-Host "⏭️ Skipping ${pkgId} (${version}) - already in GitHub."
+                  Write-Host "⏭️ Skipping ${pkgId} (${version}) - confirmed via Registration Index."
                   continue
               }
 
