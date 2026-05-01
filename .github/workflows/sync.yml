@@ -7,6 +7,7 @@ on:
 
 jobs:
   mirror:
+    name: Mirror MyGet to GitHub
     runs-on: ubuntu-latest
     permissions:
       packages: write
@@ -17,7 +18,6 @@ jobs:
         run: dotnet tool install gpr -g
 
       - name: Mirror Packages from V3 Feed
-        shell: pwsh
         run: |
           # Configuration
           $indexUrl = "https://www.myget.org/F/mediaportal/api/v3/index.json"
@@ -30,7 +30,6 @@ jobs:
           Write-Host "Searching packages at $searchUrl..."
 
           # 2. Get the list of all packages (latest versions)
-          # Default limit is 100, which covers current MediaPortal feed size
           $searchResponse = Invoke-RestMethod -Uri "$($searchUrl)?take=100"
           
           foreach ($pkg in $searchResponse.data) {
@@ -42,7 +41,7 @@ jobs:
               $fileName = "$pkgId.$version.nupkg"
 
               Write-Host "---"
-              Write-Host "Processing: $pkgId (Version: $version)"
+              Write-Host "Processing: ${pkgId} (Version: ${version})"
               
               try {
                   # Download the package file
@@ -51,13 +50,15 @@ jobs:
                   # Push to GitHub Packages
                   # gpr tool automatically injects the repository URL into nuspec to avoid GitHub rejection
                   gpr push $fileName -k ${{ secrets.GITHUB_TOKEN }} --repository $repoUrl
-                  Write-Host "Successfully mirrored: $pkgId"
+                  Write-Host "Successfully mirrored: ${pkgId}"
               }
               catch {
-                  Write-Error "Failed to process package $pkgId: $_"
+                  # Using ${} to avoid ParserError with variable names
+                  Write-Error "Failed to process package ${pkgId}: ${_}"
               }
               finally {
                   # Clean up the file to save runner disk space
                   if (Test-Path $fileName) { Remove-Item $fileName }
               }
           }
+        shell: pwsh
