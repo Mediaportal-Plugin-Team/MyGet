@@ -96,9 +96,17 @@ jobs:
 
           Write-Host "✅ Total verified packages found: $($verifiedPackages.Count)"
           
+          $blackList = @("Sqlite")
           foreach ($pkg in $verifiedPackages) {
               $pkgId = $pkg.id
               $version = $pkg.version
+
+              # Check against Blacklist
+              if ($blackList -contains $pkgId) {
+                  Write-Host "---"
+                  Write-Host "🚫 Skipping ${pkgId}: Package is in Blacklist (managed elsewhere)."
+                  continue
+              }
 
               $idLow = $pkgId.ToLower()
               $verLow = $version.ToLower()
