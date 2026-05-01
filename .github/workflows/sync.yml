@@ -18,8 +18,10 @@ jobs:
         run: |
           # Configuration
           $indexUrl = "https://www.myget.org/F/mediaportal/api/v3/index.json"
+          $baseDownloadUrl = "https://www.myget.org/F/mediaportal/api/v3/flatcontainer"
+          $ghSrcBase = "https://nuget.pkg.github.com/Mediaportal-Plugin-Team"
+          $ghSrc = "${ghSrcBase}/index.json"
           $repoUrl = "https://github.com/Mediaportal-Plugin-Team/MyGet"
-          $ghSrc = "https://nuget.pkg.github.com/Mediaportal-Plugin-Team/index.json"
           
           # 1. Fetch the Search Service URL with retries
           $maxRetries = 3
@@ -87,29 +89,32 @@ jobs:
               Write-Host "---"
               Write-Host "🔍 Checking if ${pkgId} (${version}) exists on GitHub..."
 
-              # 1. Reliable check via GitHub V3 API (Registration Index)
-              $ghSrcBase = "https://nuget.pkg.github.com/Mediaportal-Plugin-Team"
+              # 1. Reliable check via GitHub V3 API
               $ghRegistrationUrl = "${ghSrcBase}/registration-semver2/${idLow}/index.json"
-              
+             
               $exists = $false
               try {
                   $auth = @{"Authorization" = "Bearer ${{ secrets.GITHUB_TOKEN }}"}
                   $reg = Invoke-RestMethod -Uri $ghRegistrationUrl -Headers $auth -ErrorAction SilentlyContinue
                   
-                  # Flatten all versions from all pages in the registration index
-                  $allVersions = $reg.items.items.catalogEntry.version
+                  # GitHub V3 can return versions in 'items' or sub-items (pages)
+                  # This search covers all nested items to find the version
+                  $allVersions = $reg.items | ForEach-Object { $_.items } | ForEach-Object { $_.catalogEntry.version }
+
+                  if ($null -ne $allVersions) {
+                      Write-Host "ℹ️ Found versions on GitHub: $($allVersions -join ', ')"
+                  }
                   if ($allVersions -contains $version) {
                       $exists = $true
                   }
               } catch { $exists = $false }
 
               if ($exists) {
-                  Write-Host "⏭️ Skipping ${pkgId} (${version}) - confirmed via GitHub API."
+                  Write-Host "⏭️ Skipping ${pkgId} (${version}) - confirmed on GitHub."
                   continue
               }
 
               # Safe string formatting for the download URL
-              $baseDownloadUrl = "https://www.myget.org/F/mediaportal/api/v3/flatcontainer"
               $downloadUrl = "${baseDownloadUrl}/${idLow}/${verLow}/${idLow}.${verLow}.nupkg"
               
               $fileName = "${pkgId}.${version}.nupkg"
