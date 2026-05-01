@@ -1,0 +1,63 @@
+name: Mirror MyGet V3 to GitHub Packages
+
+on:
+  workflow_dispatch: # Allows manual trigger from the Actions tab
+  schedule:
+    - cron: '0 0 * * *' # Runs automatically every day at midnight
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+
+    steps:
+      - name: Install gpr tool
+        run: dotnet tool install gpr -g
+
+      - name: Mirror Packages from V3 Feed
+        shell: pwsh
+        run: |
+          # Configuration
+          $indexUrl = "https://www.myget.org/F/mediaportal/api/v3/index.json"
+          $repoUrl = "https://github.com/Mediaportal-Plugin-Team/MyGet"
+          
+          # 1. Fetch the Search Service URL from the V3 Index
+          $index = Invoke-RestMethod -Uri $indexUrl
+          $searchUrl = ($index.resources | Where-Object { $_.'@type' -eq 'SearchQueryService' }).'@id'
+
+          Write-Host "Searching packages at $searchUrl..."
+
+          # 2. Get the list of all packages (latest versions)
+          # Default limit is 100, which covers current MediaPortal feed size
+          $searchResponse = Invoke-RestMethod -Uri "$($searchUrl)?take=100"
+          
+          foreach ($pkg in $searchResponse.data) {
+              $pkgId = $pkg.id
+              $version = $pkg.version
+              
+              # Construct the download URL using the FlatContainer pattern
+              $downloadUrl = "https://myget.org($pkgId.ToLower())/$($version.ToLower())/$($pkgId.ToLower()).$($version.ToLower()).nupkg"
+              $fileName = "$pkgId.$version.nupkg"
+
+              Write-Host "---"
+              Write-Host "Processing: $pkgId (Version: $version)"
+              
+              try {
+                  # Download the package file
+                  Invoke-WebRequest -Uri $downloadUrl -OutFile $fileName -ErrorAction Stop
+                  
+                  # Push to GitHub Packages
+                  # gpr tool automatically injects the repository URL into nuspec to avoid GitHub rejection
+                  gpr push $fileName -k ${{ secrets.GITHUB_TOKEN }} --repository $repoUrl
+                  Write-Host "Successfully mirrored: $pkgId"
+              }
+              catch {
+                  Write-Error "Failed to process package $pkgId: $_"
+              }
+              finally {
+                  # Clean up the file to save runner disk space
+                  if (Test-Path $fileName) { Remove-Item $fileName }
+              }
+          }
