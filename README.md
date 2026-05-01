@@ -29,7 +29,7 @@ The mirroring process is automated via **GitHub Actions**:
 ## 📂 Repository Structure
 
 *   `.github/workflows/sync.yml`: The PowerShell-based GitHub Action that performs the sync.
-*   `LICENSE`: Licensed under the **AGPL-3.0**.
+*   `LICENSE`: Licensed under the **GPL-3.0**.
 
 ## 📝 Maintenance
 
