@@ -97,6 +97,9 @@ jobs:
 
                   # Check if the specific version is in the results
                   if ($null -ne $found) {
+                      Write-Host "ℹ️ Full API Response (JSON):"
+                      $found | ConvertTo-Json -Depth 10 | Write-Host
+                      
                       Write-Host "ℹ️ Found versions on GitHub: $($found.data.versions -join ', ')"
                   }
                   if ($found.data.versions | Where-Object { $_.version -eq $version }) {
