@@ -53,32 +53,54 @@ jobs:
 
           Write-Host "📡 Searching packages at $searchUrl..."
 
-          # 2. Get the list of packages with retries
-          $retryCount = 0
-          $searchResponse = $null
+          # 2. Get the list of ALL verified packages (with pagination and retries)
+          $verifiedPackages = @()
+          $skip = 0
+          $take = 100
+          $allPagesFetched = $false
 
-          while ($null -eq $searchResponse -and $retryCount -lt $maxRetries) {
-              try {
-                  $response = Invoke-WebRequest -Uri "$($searchUrl)?take=100" -UseBasicParsing -ErrorAction Stop
-                  if ($response.Headers["Content-Type"] -like "*json*") {
-                      $searchResponse = $response.Content | ConvertFrom-Json
-                  } else {
-                      throw "Server returned HTML instead of JSON during search."
+          while (-not $allPagesFetched) {
+              $retryCount = 0
+              $pageResponse = $null
+
+              while ($null -eq $pageResponse -and $retryCount -lt $maxRetries) {
+                  try {
+                      Write-Host "📡 Fetching packages (skip=$skip, take=$take)..."
+                      $response = Invoke-WebRequest -Uri "$($searchUrl)?take=$take&skip=$skip" -UseBasicParsing -ErrorAction Stop
+                      if ($response.Headers["Content-Type"] -like "*json*") {
+                          $pageResponse = $response.Content | ConvertFrom-Json
+                      } else {
+                          throw "Server returned HTML instead of JSON."
+                      }
+                  }
+                  catch {
+                      $retryCount++
+                      Write-Host "⚠️ Attempt $retryCount failed. Retrying in 5 seconds..."
+                      Start-Sleep -Seconds 5
                   }
               }
-              catch {
-                  $retryCount++
-                  Write-Host "⚠️ Search attempt $retryCount failed. Retrying in 5 seconds..."
-                  Start-Sleep -Seconds 5
+
+              if ($null -eq $pageResponse) {
+                  Write-Error "❌ Failed to fetch page at skip=$skip. Exiting."
+                  exit 1
+              }
+
+              if ($pageResponse.data.Count -eq 0) {
+                  $allPagesFetched = $true
+              } else {
+                  $verifiedOnPage = $pageResponse.data | Where-Object { $_.verified -eq $true }
+                  $verifiedPackages += $verifiedOnPage
+                  $skip += $take
               }
           }
 
-          if ($null -eq $searchResponse) {
-              Write-Error "❌ Failed to get package list from MyGet after multiple attempts."
-              exit 1
-          }
-                    
-          foreach ($pkg in $searchResponse.data) {
+          Write-Host "✅ Total verified packages found: $($verifiedPackages.Count)"
+          
+          foreach ($pkg in $verifiedPackages) {
+              if ($pkg.verified -ne $true) {
+                  continue
+              }
+
               $pkgId = $pkg.id
               $version = $pkg.version
 
@@ -97,14 +119,16 @@ jobs:
 
                   # Check if the specific version is in the results
                   if ($null -ne $found) {
-                      Write-Host "ℹ️ Full API Response (JSON):"
-                      $found | ConvertTo-Json -Depth 10 | Write-Host
-                      
-                      Write-Host "ℹ️ Found versions on GitHub: $($found.data.versions -join ', ')"
+                      Write-Host "ℹ️ Found versions on GitHub: $($found.data.versions.version -join ', ')"
                   }
-                  if ($found.data.versions | Where-Object { $_.version -eq $version }) {
-                      $exists = $true
-                  }
+                  foreach ($entry in $found.data) {
+                      if ($entry.id.ToLower() -eq $idLow) {
+                          if ($entry.versions.version -contains $version) {
+                              $exists = $true
+                              break
+                          }
+                      }
+                  }                  
               } catch { $exists = $false }
 
               if ($exists) {
