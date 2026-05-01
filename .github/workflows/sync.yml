@@ -92,9 +92,14 @@ jobs:
               try {
                   $auth = @{"Authorization" = "Bearer ${{ secrets.GITHUB_TOKEN }}"}
                   $found = Invoke-RestMethod -Uri $ghSearchUrl -Headers $auth -ErrorAction SilentlyContinue
-                  # Check if the specific version is in the results
-                  if ($found.data.versions | Where-Object { $_.version -eq $version }) {
-                      $exists = $true
+                  # GitHub returns a list of matches in 'data'. We need to check versions in each match.
+                  foreach ($packageEntry in $found.data) {
+                      if ($packageEntry.id.ToLower() -eq $idLow) {
+                          if ($packageEntry.versions | Where-Object { $_.version -eq $version }) {
+                              $exists = $true
+                              break
+                          }
+                      }
                   }
               } catch { $exists = $false }
 
