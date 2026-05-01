@@ -111,28 +111,12 @@ jobs:
               Write-Host "---"
               Write-Host "🔍 Checking if ${pkgId} (${version}) exists on GitHub..."
 
-              # Check if package already exists using Registration Index
-              $exists = $false
-              try {
-                  $ghRegUrl = "${ghSrcBase}/registration-semver2/${idLow}/index.json"
-                  $auth = @{"Authorization" = "Bearer ${{ secrets.GITHUB_TOKEN }}"}
-                  
-                  # Fetching metadata
-                  $reg = Invoke-RestMethod -Uri $ghRegUrl -Headers $auth -ErrorAction SilentlyContinue
-                  
-                  # Deep collection of all versions from all possible pages/items
-                  $allVersions = $reg.items | ForEach-Object { $_.items.catalogEntry.version }
-
-                  if ($null -ne $allVersions) {
-                      Write-Host "ℹ️ GitHub versions for ${pkgId}: $($allVersions -join ', ')"
-                      if ($allVersions -contains $version) {
-                          $exists = $true
-                      }
-                  }
-              } catch { $exists = $false }
-
-              if ($exists) {
-                  Write-Host "⏭️ Skipping ${pkgId} (${version}) - confirmed via Registration Index."
+              # 1. Check existence using NuGet CLI (The only 100% reliable way)
+              $listCheck = dotnet nuget list $pkgId --source $ghSrc --api-key ${{ secrets.GITHUB_TOKEN }}
+              
+              # If the exact version string is found in the output, we skip
+              if ($listCheck -match [regex]::Escape($version)) {
+                  Write-Host "⏭️ Skipping ${pkgId} (${version}) - confirmed on GitHub."
                   continue
               }
 
