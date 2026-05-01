@@ -53,9 +53,31 @@ jobs:
 
           Write-Host "Searching packages at $searchUrl..."
 
-          # 2. Get the list of packages
-          $searchResponse = Invoke-RestMethod -Uri "$($searchUrl)?take=100"
-          
+          # 2. Get the list of packages with retries
+          $retryCount = 0
+          $searchResponse = $null
+
+          while ($null -eq $searchResponse -and $retryCount -lt $maxRetries) {
+              try {
+                  $response = Invoke-WebRequest -Uri "$($searchUrl)?take=100" -UseBasicParsing -ErrorAction Stop
+                  if ($response.Headers["Content-Type"] -like "*json*") {
+                      $searchResponse = $response.Content | ConvertFrom-Json
+                  } else {
+                      throw "Server returned HTML instead of JSON during search."
+                  }
+              }
+              catch {
+                  $retryCount++
+                  Write-Host "⚠️ Search attempt $retryCount failed. Retrying in 5 seconds..."
+                  Start-Sleep -Seconds 5
+              }
+          }
+
+          if ($null -eq $searchResponse) {
+              Write-Error "❌ Failed to get package list from MyGet after multiple attempts."
+              exit 1
+          }
+                    
           foreach ($pkg in $searchResponse.data) {
               $pkgId = $pkg.id
               $version = $pkg.version
