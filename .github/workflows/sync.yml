@@ -115,7 +115,7 @@ jobs:
               $listCheck = dotnet nuget list $pkgId --source $ghSrc --api-key ${{ secrets.GITHUB_TOKEN }}
               
               # If the exact version string is found in the output, we skip
-              if ($listCheck -match [regex]::Escape($version)) {
+              if ($listCheck -match "\b$([regex]::Escape($version))\b") {
                   Write-Host "⏭️ Skipping ${pkgId} (${version}) - confirmed on GitHub."
                   continue
               }
