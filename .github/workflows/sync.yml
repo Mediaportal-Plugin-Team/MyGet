@@ -53,7 +53,7 @@ jobs:
 
           Write-Host "📡 Searching packages at $searchUrl..."
 
-          # 2. Get the list of ALL verified packages (with pagination and retries)
+          # 2. Get the list of ALL verified packages (pagination + retries)
           $verifiedPackages = @()
           $skip = 0
           $take = 100
@@ -97,49 +97,44 @@ jobs:
           Write-Host "✅ Total verified packages found: $($verifiedPackages.Count)"
           
           foreach ($pkg in $verifiedPackages) {
-              if ($pkg.verified -ne $true) {
-                  continue
-              }
-
               $pkgId = $pkg.id
               $version = $pkg.version
 
               $idLow = $pkgId.ToLower()
               $verLow = $version.ToLower()
 
-              # Check if package already exists in GitHub Packages
               Write-Host "---"
-              Write-Host "🔍 Checking if ${pkgId} (${version}) exists on GitHub..."
-
-              # 1. Check existence using NuGet CLI (The only 100% reliable way)
-              $listCheck = dotnet nuget list $pkgId --source $ghSrc --api-key ${{ secrets.GITHUB_TOKEN }}
-              
-              # If the exact version string is found in the output, we skip
-              if ($listCheck -match "\b$([regex]::Escape($version))\b") {
-                  Write-Host "⏭️ Skipping ${pkgId} (${version}) - confirmed on GitHub."
-                  continue
-              }
-
-              # Safe string formatting for the download URL
-              $downloadUrl = "${baseDownloadUrl}/${idLow}/${verLow}/${idLow}.${verLow}.nupkg"
-              
-              $fileName = "${pkgId}.${version}.nupkg"
-
               Write-Host "🚀 Processing: ${pkgId} (Version: ${version})"
+
+              # 3. Download the package
+              $downloadUrl = "${baseDownloadUrl}/${idLow}/${verLow}/${idLow}.${verLow}.nupkg"
+              $fileName = "${pkgId}.${version}.nupkg"
               Write-Host "📡 Download URL: ${downloadUrl}"
               
               try {
-                  # Download the package
                   Invoke-WebRequest -Uri $downloadUrl -OutFile $fileName -ErrorAction Stop
-                  
-                  # Push to GitHub Packages using standard dotnet nuget push
-                  # We use --skip-duplicate to avoid errors if version exists
-                  dotnet nuget push $fileName `
-                    --source $ghSrc `
-                    --api-key ${{ secrets.GITHUB_TOKEN }} `
-                    --skip-duplicate
+              } catch {
+                  Write-Host "⚠️ Warning: Failed to download ${pkgId}. Skipping..."
+                  continue
+              }                  
 
-                  Write-Host "✅ Successfully mirrored: ${pkgId}"
+              # 4. Push to GitHub Packages
+              try {
+                  # Using --skip-duplicate to avoid errors if version already exists
+                  # Output is captured to provide cleaner logs
+                  $pushOutput = dotnet nuget push $fileName `
+                      --source $ghSrc `
+                      --api-key ${{ secrets.GITHUB_TOKEN }} `
+                      --skip-duplicate 2>&1
+    
+                  if ($pushOutput -match "already exists") {
+                      Write-Host "⏭️  Result: Already on GitHub. Skipped."
+                  } elseif ($pushOutput -match "Your package was pushed") {
+                      Write-Host "✅ Result: Successfully mirrored!"
+                  } else {
+                      Write-Host "❌ Result: Push failed with error:"
+                      Write-Host $pushOutput
+                  }
               }
               catch {
                   Write-Host "⚠️ Warning: Standard push failed for ${pkgId}. This often happens if the package lacks a 'repository' field in its nuspec."
@@ -148,6 +143,8 @@ jobs:
               finally {
                   if (Test-Path $fileName) { Remove-Item $fileName }
               }
+
+              # Delay to prevent rate limiting
               Start-Sleep -Milliseconds 500
           }
         shell: pwsh
