@@ -35,12 +35,26 @@ jobs:
           foreach ($pkg in $searchResponse.data) {
               $pkgId = $pkg.id
               $version = $pkg.version
-              
+
+              $idLow = $pkgId.ToLower()
+              $verLow = $version.ToLower()
+
+              # Check if package already exists in GitHub Packages
+              $ghPackageUrl = "https://nuget.pkg.github.com/Mediaportal-Plugin-Team/${idLow}/${verLow}/${idLow}.${verLow}.nupkg"
+              $exists = $false
+              try {
+                  $check = Invoke-WebRequest -Uri $ghPackageUrl -Method Head -Headers @{"Authorization" = "Bearer ${{ secrets.GITHUB_TOKEN }}"} -ErrorAction SilentlyContinue
+                  if ($check.StatusCode -eq 200) { $exists = $true }
+              } catch { $exists = $false }
+
+              if ($exists) {
+                  Write-Host "⏭️ Skipping ${pkgId} (${version}) - already exists in GitHub."
+                  continue
+              }
+
               # Safe string formatting for the download URL
-              $idLower = $pkgId.ToLower()
-              $verLower = $version.ToLower()
               $baseDownloadUrl = "https://www.myget.org/F/mediaportal/api/v3/flatcontainer"
-              $downloadUrl = "${baseDownloadUrl}/${idLower}/${verLower}/${idLower}.${verLower}.nupkg"
+              $downloadUrl = "${baseDownloadUrl}/${idLow}/${verLow}/${idLow}.${verLow}.nupkg"
               
               $fileName = "${pkgId}.${version}.nupkg"
 
