@@ -89,29 +89,23 @@ jobs:
               Write-Host "---"
               Write-Host "🔍 Checking if ${pkgId} (${version}) exists on GitHub..."
 
-              $ghRegistrationUrl = "${ghSrcBase}/registration-semver2/${idLow}/index.json"
+              # Check existence via GitHub Native API
               $exists = $false
               try {
-                  $auth = @{"Authorization" = "Bearer ${{ secrets.GITHUB_TOKEN }}"}
-                  $reg = Invoke-RestMethod -Uri $ghRegistrationUrl -Headers $auth -ErrorAction SilentlyContinue
-                  
-                  # GitHub V3 can have versions in 'items' directly or inside 'items.items' (pages)
-                  # We use a deep select to get all catalogEntry versions from all possible levels
-                  $allVersions = $reg.items | ForEach-Object { $_.items } | ForEach-Object { $_.catalogEntry.version }
+                  # Get all versions of the package from GitHub Org
+                  $ghVersions = gh api "/orgs/Mediaportal-Plugin-Team/packages/nuget/${idLow}/versions" --jq ".[].name" --env GH_TOKEN=${{ secrets.GITHUB_TOKEN }} 2>$null
 
-                  if ($null -ne $allVersions) {
-                      Write-Host "ℹ️ Found versions on GitHub: $($allVersions -join ', ')"
+                  if ($null -ne $ghVersions) {
+                      Write-Host "ℹ️ Found versions on GitHub: $($ghVersions -join ', ')"
                   }
                   
-                  if ($allVersions -contains $version) {
+                  if ($ghVersions -contains $version) {
                       $exists = $true
                   }
-              } catch { 
-                  $exists = $false 
-              }
+              } catch { $exists = $false }
 
               if ($exists) {
-                  Write-Host "⏭️ Skipping ${pkgId} (${version}) - confirmed on GitHub."
+                  Write-Host "⏭️ Skipping ${pkgId} (${version}) - confirmed via GitHub API."
                   continue
               }
 
