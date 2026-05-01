@@ -23,8 +23,32 @@ jobs:
           $indexUrl = "https://www.myget.org/F/mediaportal/api/v3/index.json"
           $repoUrl = "https://github.com/Mediaportal-Plugin-Team/MyGet"
           
-          # 1. Fetch the Search Service URL
-          $index = Invoke-RestMethod -Uri $indexUrl
+          # 1. Fetch the Search Service URL with retries
+          $maxRetries = 3
+          $retryCount = 0
+          $index = $null
+
+          while ($null -eq $index -and $retryCount -lt $maxRetries) {
+              try {
+                  $response = Invoke-WebRequest -Uri $indexUrl -UseBasicParsing -ErrorAction Stop
+                  if ($response.Headers["Content-Type"] -like "*json*") {
+                      $index = $response.Content | ConvertFrom-Json
+                  } else {
+                      throw "Server returned HTML instead of JSON. MyGet might be down."
+                  }
+              }
+              catch {
+                  $retryCount++
+                  Write-Host "⚠️ Attempt $retryCount failed to reach MyGet. Retrying in 5 seconds..."
+                  Start-Sleep -Seconds 5
+              }
+          }
+
+          if ($null -eq $index) {
+              Write-Error "❌ MyGet is currently unavailable or returning errors. Please try again later."
+              exit 1
+          }
+
           $searchUrl = ($index.resources | Where-Object { $_.'@type' -eq 'SearchQueryService' }).'@id'
 
           Write-Host "Searching packages at $searchUrl..."
