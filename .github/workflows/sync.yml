@@ -49,7 +49,7 @@ jobs:
 
           $searchUrl = ($index.resources | Where-Object { $_.'@type' -eq 'SearchQueryService' }).'@id'
 
-          Write-Host "Searching packages at $searchUrl..."
+          Write-Host "📡 Searching packages at $searchUrl..."
 
           # 2. Get the list of packages with retries
           $retryCount = 0
@@ -87,17 +87,10 @@ jobs:
               Write-Host "---"
               Write-Host "🔍 Checking if ${pkgId} (${version}) exists on GitHub..."
 
-              $ghVersionIndexUrl = "https://nuget.pkg.github.com/Mediaportal-Plugin-Team/registration-semver2/${idLow}/${verLow}.json"
-              $exists = $false
-              try {
-                  $auth = @{"Authorization" = "Bearer ${{ secrets.GITHUB_TOKEN }}"}
-                  # If this file exists, the version is definitely on GitHub
-                  $check = Invoke-WebRequest -Uri $ghVersionIndexUrl -Method Head -Headers $auth -ErrorAction SilentlyContinue
-                  if ($check.StatusCode -eq 200) { $exists = $true }
-              } catch { $exists = $false }
-
-              if ($exists) {
-                  Write-Host "⏭️ Skipping ${pkgId} (${version}) - confirmed via Version Index."
+              $listCheck = dotnet nuget list $pkgId --source $ghSrc --api-key ${{ secrets.GITHUB_TOKEN }}
+              
+              if ($listCheck -match [regex]::Escape($version)) {
+                  Write-Host "⏭️ Skipping ${pkgId} (${version}) - already in GitHub."
                   continue
               }
 
@@ -107,8 +100,8 @@ jobs:
               
               $fileName = "${pkgId}.${version}.nupkg"
 
-              Write-Host "Processing: ${pkgId} (Version: ${version})"
-              Write-Host "Download URL: ${downloadUrl}"
+              Write-Host "🚀 Processing: ${pkgId} (Version: ${version})"
+              Write-Host "📡 Download URL: ${downloadUrl}"
               
               try {
                   # Download the package
@@ -130,5 +123,6 @@ jobs:
               finally {
                   if (Test-Path $fileName) { Remove-Item $fileName }
               }
+              Start-Sleep -Milliseconds 500
           }
         shell: pwsh
