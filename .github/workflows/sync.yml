@@ -19,6 +19,7 @@ jobs:
           # Configuration
           $indexUrl = "https://www.myget.org/F/mediaportal/api/v3/index.json"
           $repoUrl = "https://github.com/Mediaportal-Plugin-Team/MyGet"
+          $ghSrc = "https://nuget.pkg.github.com/Mediaportal-Plugin-Team/index.json"
           
           # 1. Fetch the Search Service URL with retries
           $maxRetries = 3
@@ -83,15 +84,13 @@ jobs:
               $verLow = $version.ToLower()
 
               # Check if package already exists in GitHub Packages
-              $ghPackageUrl = "https://nuget.pkg.github.com/Mediaportal-Plugin-Team/${idLow}/${verLow}/${idLow}.${verLow}.nupkg"
-              $exists = $false
-              try {
-                  $check = Invoke-WebRequest -Uri $ghPackageUrl -Method Head -Headers @{"Authorization" = "Bearer ${{ secrets.GITHUB_TOKEN }}"} -ErrorAction SilentlyContinue
-                  if ($check.StatusCode -eq 200) { $exists = $true }
-              } catch { $exists = $false }
-
-              if ($exists) {
-                  Write-Host "⏭️ Skipping ${pkgId} (${version}) - already exists in GitHub."
+              Write-Host "🔍 Checking if ${pkgId} (${version}) exists on GitHub..."
+              
+              # Search for exact ID and Version in GitHub feed
+              $check = dotnet nuget list $pkgId --source $ghSrc --api-key ${{ secrets.GITHUB_TOKEN }}
+              
+              if ($check -match $version) {
+                  Write-Host "⏭️ Skipping ${pkgId} (${version}) - already exists."
                   continue
               }
 
@@ -112,7 +111,7 @@ jobs:
                   # Push to GitHub Packages using standard dotnet nuget push
                   # We use --skip-duplicate to avoid errors if version exists
                   dotnet nuget push $fileName `
-                    --source "https://nuget.pkg.github.com/Mediaportal-Plugin-Team/index.json" `
+                    --source $ghSrc `
                     --api-key ${{ secrets.GITHUB_TOKEN }} `
                     --skip-duplicate
 
