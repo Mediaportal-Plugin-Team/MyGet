@@ -14,9 +14,6 @@ jobs:
       contents: read
 
     steps:
-      - name: 🛠️ Install GPR tool
-        run: dotnet tool install gpr -g
-
       - name: 🚀 Mirror Packages from V3 Feed
         run: |
           # Configuration
@@ -112,13 +109,18 @@ jobs:
                   # Download the package
                   Invoke-WebRequest -Uri $downloadUrl -OutFile $fileName -ErrorAction Stop
                   
-                  # Push to GitHub Packages
-                  gpr push $fileName -k ${{ secrets.GITHUB_TOKEN }} --repository $repoUrl
-                  Write-Host "Successfully mirrored: ${pkgId}"
+                  # Push to GitHub Packages using standard dotnet nuget push
+                  # We use --skip-duplicate to avoid errors if version exists
+                  dotnet nuget push $fileName `
+                    --source "https://nuget.pkg.github.com/Mediaportal-Plugin-Team/index.json" `
+                    --api-key ${{ secrets.GITHUB_TOKEN }} `
+                    --skip-duplicate
+
+                  Write-Host "✅ Successfully mirrored: ${pkgId}"
               }
               catch {
-                  # Check if error is just a duplicate package (HTTP 409 or similar)
-                  Write-Host "Warning: Could not process ${pkgId}. It might already exist or source is unavailable. Error: ${_}"
+                  Write-Host "⚠️ Warning: Standard push failed for ${pkgId}. This often happens if the package lacks a 'repository' field in its nuspec."
+                  Write-Host "Error details: ${_}"
               }
               finally {
                   if (Test-Path $fileName) { Remove-Item $fileName }
