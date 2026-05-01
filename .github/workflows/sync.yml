@@ -96,17 +96,11 @@ jobs:
                   $found = Invoke-RestMethod -Uri $ghSearchUrl -Headers $auth -ErrorAction SilentlyContinue
 
                   # Check if the specific version is in the results
-                  foreach ($entry in $found.data) {
-                      if ($entry.id -eq $pkgId) {
-                          $allVersions = $entry.versions.version
-                          if ($null -ne $allVersions) {
-                              Write-Host "ℹ️ Versions on GitHub: $($allVersions -join ', ')"
-                              if ($allVersions -contains $version) {
-                                  $exists = $true
-                                  break
-                              }
-                          }
-                      }
+                  if ($null -ne $found) {
+                      Write-Host "ℹ️ Found versions on GitHub: $($found.data.versions -join ', ')"
+                  }
+                  if ($found.data.versions | Where-Object { $_.version -eq $version }) {
+                      $exists = $true
                   }
               } catch { $exists = $false }
 
