@@ -94,7 +94,7 @@ jobs:
                   $auth = @{"Authorization" = "Bearer ${{ secrets.GITHUB_TOKEN }}"}
                   $v2Response = Invoke-RestMethod -Uri $ghV2Url -Headers $auth -ErrorAction SilentlyContinue
                   
-                  if ($null -ne v2Response) {
+                  if ($null -ne $v2Response) {
                       Write-Host "ℹ️ Found versions on GitHub: $v2Response"
                   }
                   if ($v2Response -match [regex]::Escape($version)) {
