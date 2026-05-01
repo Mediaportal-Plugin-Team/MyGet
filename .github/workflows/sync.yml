@@ -84,20 +84,22 @@ jobs:
               $verLow = $version.ToLower()
 
               # Check if package already exists in GitHub Packages
+              Write-Host "---"
               Write-Host "🔍 Checking if ${pkgId} (${version}) exists on GitHub..."
 
-              # GitHub V3 metadata URL for the package version
-              $ghCheckUrl = "https://nuget.pkg.github.com/Mediaportal-Plugin-Team/flatcontainer/${idLow}/${verLow}/${idLow}.metadata.json"
-              
+              $ghSearchUrl = "https://nuget.pkg.github.com/Mediaportal-Plugin-Team/query?q=packageid:${idLow}&prerelease=true"
               $exists = $false
               try {
-                  # We use a HEAD or GET request with the token to see if metadata exists
-                  $check = Invoke-WebRequest -Uri $ghCheckUrl -Method Head -Headers @{"Authorization" = "Bearer ${{ secrets.GITHUB_TOKEN }}"} -ErrorAction SilentlyContinue
-                  if ($check.StatusCode -eq 200) { $exists = $true }
+                  $auth = @{"Authorization" = "Bearer ${{ secrets.GITHUB_TOKEN }}"}
+                  $found = Invoke-RestMethod -Uri $ghSearchUrl -Headers $auth -ErrorAction SilentlyContinue
+                  # Check if the specific version is in the results
+                  if ($found.data.versions | Where-Object { $_.version -eq $version }) {
+                      $exists = $true
+                  }
               } catch { $exists = $false }
 
               if ($exists) {
-                  Write-Host "⏭️ Skipping ${pkgId} (${version}) - confirmed on GitHub."
+                  Write-Host "⏭️ Skipping ${pkgId} (${version}) - already in GitHub."
                   continue
               }
 
@@ -107,7 +109,6 @@ jobs:
               
               $fileName = "${pkgId}.${version}.nupkg"
 
-              Write-Host "---"
               Write-Host "Processing: ${pkgId} (Version: ${version})"
               Write-Host "Download URL: ${downloadUrl}"
               
