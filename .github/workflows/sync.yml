@@ -89,23 +89,29 @@ jobs:
               Write-Host "---"
               Write-Host "🔍 Checking if ${pkgId} (${version}) exists on GitHub..."
 
-              # Check existence via GitHub Native API
+              $ghSearchUrl = "${ghSrcBase}/query?q=packageid:${idLow}&prerelease=true"
               $exists = $false
               try {
-                  # Get all versions of the package from GitHub Org
-                  $ghVersions = gh api "/orgs/Mediaportal-Plugin-Team/packages/nuget/${idLow}/versions" --jq ".[].name" --env GH_TOKEN=${{ secrets.GITHUB_TOKEN }} 2>$null
+                  $auth = @{"Authorization" = "Bearer ${{ secrets.GITHUB_TOKEN }}"}
+                  $found = Invoke-RestMethod -Uri $ghSearchUrl -Headers $auth -ErrorAction SilentlyContinue
 
-                  if ($null -ne $ghVersions) {
-                      Write-Host "ℹ️ Found versions on GitHub: $($ghVersions -join ', ')"
-                  }
-                  
-                  if ($ghVersions -contains $version) {
-                      $exists = $true
+                  # Check if the specific version is in the results
+                  foreach ($entry in $found.data) {
+                      if ($entry.id -eq $pkgId) {
+                          $allVersions = $entry.versions.version
+                          if ($null -ne $allVersions) {
+                              Write-Host "ℹ️ Versions on GitHub: $($allVersions -join ', ')"
+                              if ($allVersions -contains $version) {
+                                  $exists = $true
+                                  break
+                              }
+                          }
+                      }
                   }
               } catch { $exists = $false }
 
               if ($exists) {
-                  Write-Host "⏭️ Skipping ${pkgId} (${version}) - confirmed via GitHub API."
+                  Write-Host "⏭️ Skipping ${pkgId} (${version}) - already in GitHub."
                   continue
               }
 
